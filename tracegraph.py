@@ -72,9 +72,11 @@ class Zone(object):
         if isinstance(rdtype,basestring):
             rdtype = dns.rdatatype.from_text(rdtype)
         if self.name == '.' and not self.resolvers:
+            # if this is a root and doesn't have resolvers, find root resolvers using default resolver
             self.find_root_resolvers()
         if not name.endswith('.'):
             name += '.'
+        # dfs on all resolvers here
         for resolver in sorted(self.resolvers.values(), key=lambda x: x.name):
             resolver.resolve(name, rdtype=rdtype)
 
@@ -215,7 +217,7 @@ class Zone(object):
         inst = klass(data['name'], root)
         for resolver in data['resolvers']:
             resolver = Resolver.deserialize(resolver, inst)
-            inst.resolvers[resolver.name] = resolver
+            inst.resolvers[resolver.name.lower()] = resolver
         if root:
             root.subzones[inst.name] = inst
         if not root:
@@ -246,9 +248,9 @@ class Name(object):
             inst.addresses[addr] = []
             for zone,resolver in data['addresses'][addr]:
                 if zone == '.':
-                    inst.addresses[addr].append(root.resolvers[resolver])
+                    inst.addresses[addr].append(root.resolvers[resolver.lower()])
                 else:
-                    inst.addresses[addr].append(root.subzones[zone].resolvers[resolver])
+                    inst.addresses[addr].append(root.subzones[zone].resolvers[resolver.lower()])
         return inst
 
 class Resolver(object):
@@ -341,7 +343,7 @@ class Resolver(object):
                     zone = self.root.subzones[zonename]
 
                 for item in record.items:
-                    ns = item.target.to_text()
+                    ns = item.target.to_text().lower()
                     if ns not in zone.resolvers:
                         zone.resolvers[ns] = Resolver(zone, ns)
                     if self not in zone.resolvers[ns].up:
@@ -450,7 +452,7 @@ class Resolver(object):
         inst = klass(zone, data['name'])
         inst.ip = data['ip']
         for zone, resolver in data['up']:
-            inst.up.append(inst.root.subzones[zone].resolvers[resolver])
+            inst.up.append(inst.root.subzones[zone].resolvers[resolver.lower()])
         return inst
 
 def root():
@@ -494,8 +496,9 @@ Examples:
     p.add_option('--even-trace-m-gtld-servers-net', dest='even_trace_m_gtld_servers_net', action='store_true', default=False,
                  help="m.gtld-servers.net is special, it's specialness is ignored unless this option is given")
 
-    opts, args = p.parse_args()
+    opts, args = p.parse_args()  # read and parse sys.args[1:]
 
+    # deal with input errors
     if opts.load:
         if args:
             p.error("You're loading a dump so no extra queries")
@@ -526,7 +529,7 @@ Examples:
                 name = dns.reversename.from_address(name).to_text()
             except dns.exception.SyntaxError:
                 pass
-        root = root()
+        root = root()  # generate a root zone and trace from it to the target address
         root.trace_missing_glue = opts.trace_missing_glue
         root.even_trace_m_gtld_servers_net = opts.even_trace_m_gtld_servers_net
         root.trace(name, rdtype=rdtype)
