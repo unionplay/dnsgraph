@@ -289,9 +289,12 @@ class Resolver(object):
             log("Trying to resolve %s (%s) on %s (%s) (R:%s)" % (name, dns.rdatatype.to_text(rdtype), self.name, self.ip[0], register))
             try:
                 ans = res.query(name, rdtype=rdtype, raise_on_no_answer=False)
-            except (dns.resolver.NXDOMAIN, dns.resolver.NoNameservers, dns.resolver.Timeout):
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoNameservers, dns.resolver.Timeout, ValueError):
                 # Insert a bogus name node for NXDOMAIN/SERVFAIL
-                msg = dns_errors[sys.exc_type]
+                if sys.exc_type not in dns_errors:
+                    msg = "SERVFAIL"
+                else:
+                    msg = dns_errors[sys.exc_type]
                 if not register:
                     return
                 if name not in self.root.names:
